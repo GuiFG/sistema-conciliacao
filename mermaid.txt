@@ -1,0 +1,37 @@
+flowchart TD
+  %% Ingress
+  A["Fornecedor<br>CSV D-1"] --> B["S3 Bucket<br>reconciliation-ingress"]
+  B -->|ObjectCreated| C["EventBridge Rule"]
+  C --> D["Lambda Trigger<br>validação básica + job_id"]
+  D --> E["Step Functions<br>reconciliation-pipeline"]
+
+  %% Processamento
+  E --> F1["Glue Job 1<br>Validação + Parsing CSV"]
+  F1 --> G1["S3 Bucket<br>reconciliation-intermediate<br>validated.parquet + invalid.parquet"]
+
+  E --> F2["Glue Job 2<br>Conciliação (Spark)"]
+  G1 --> F2
+  F2 -->|JDBC| H["RDS (Base interna)<br>índice em ordem-id"]
+  F2 --> G2["S3 Bucket<br>reconciliation-intermediate<br>divergences.parquet"]
+
+  E --> F3["Glue Job 3<br>Prep QuickSight + Parquet"]
+  G2 --> F3
+  F3 --> I["S3 Bucket<br>reconciliation-output<br>divergencias.parquet"]
+
+  %% Catálogo + BI
+  F3 --> J["Glue Data Catalog<br>DB reconciliation / table divergences"]
+  J --> K["Amazon QuickSight<br>Dataset + Dashboard"]
+
+  %% Notificações
+  E --> L["SNS Topic<br>reconciliation-alerts"]
+  L --> M["Email Subscribers"]
+  L --> N["Lambda Slack Notifier"]
+  N --> O["Slack Channel<br>#conciliação-alerts"]
+
+  %% Observabilidade
+  D --> P["CloudWatch Logs/Metrics"]
+  E --> P
+  F1 --> P
+  F2 --> P
+  F3 --> P
+  P --> Q["CloudWatch Alarms"]

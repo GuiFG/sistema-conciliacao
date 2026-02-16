@@ -1,0 +1,30 @@
+sequenceDiagram
+  participant S3 as S3 (ingress)
+  participant EB as EventBridge
+  participant LT as Lambda Trigger
+  participant SF as Step Functions
+  participant G1 as Glue Job 1 (Validação)
+  participant S3i as S3 (intermediate)
+  participant G2 as Glue Job 2 (Conciliação)
+  participant RDS as RDS (Base interna)
+  participant G3 as Glue Job 3 (QuickSight Prep)
+  participant S3o as S3 (output)
+  participant GC as Glue Catalog
+  participant QS as QuickSight
+  participant SNS as SNS
+  participant SL as Slack/Email
+
+  S3->>EB: ObjectCreated (.csv)
+  EB->>LT: dispara evento
+  LT->>SF: startExecution(job_id, s3_key, file_hash)
+  SF->>G1: startJobRun
+  G1->>S3i: grava validated/invalid parquet
+  SF->>G2: startJobRun(validated_path)
+  G2->>RDS: lê base via JDBC (join por ordem_id)
+  G2->>S3i: grava divergences parquet
+  SF->>G3: startJobRun(divergences_path)
+  G3->>S3o: grava parquet final
+  G3->>GC: atualiza catálogo (crawler/DDL)
+  GC->>QS: dataset lê tabela/partições
+  SF->>SNS: publica sucesso/falha
+  SNS->>SL: entrega notificações (email + slack)
